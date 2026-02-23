@@ -75,11 +75,11 @@ cpp-s3-uploader-libcurl-openssl/
 
 ## Design Goals
 
--Small, understandable implementation
--Explicit SigV4 signing logic
--No hidden magic
--Portable across Linux and Windows
--Suitable for integration into larger C++ systems
+- Small, understandable implementation
+- Explicit SigV4 signing logic
+- No hidden magic
+- Portable across Linux and Windows
+- Suitable for integration into larger C++ systems
 
 This is not a full S3 client — it is a focused uploader component.
 
@@ -108,9 +108,9 @@ bool success = uploader.upload_file(
 
 Requires:
 
--CMake 3.10+
--libcurl
--OpenSSL
+- CMake 3.10+
+- libcurl
+- OpenSSL
 
 ```Bash
 mkdir build
@@ -126,10 +126,10 @@ cmake --build .
 This implementation is intended for educational and lightweight production use.
 It does not implement:
 
--Multipart uploads
--Retries with backoff
--Full S3 API coverage
--Presigned URLs
+- Multipart uploads
+- Retries with backoff
+- Full S3 API coverage
+- Presigned URLs
 
 Those can be added as extensions.
 
