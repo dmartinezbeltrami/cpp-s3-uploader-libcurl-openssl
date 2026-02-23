@@ -1,5 +1,13 @@
 #include "s3_uploader.h"
 
+#include <openssl/evp.h>
+#include <openssl/hmac.h>
+#include <openssl/sha.h>
+
+#include <iomanip>
+#include <sstream>
+#include <utility>
+
 S3Uploader::S3Uploader(S3Config config)
     : config_(std::move(config)) {}
 
@@ -22,25 +30,50 @@ S3Uploader::Timestamp S3Uploader::make_timestamp() {
 }
 
 std::string S3Uploader::sha256_hex(const std::string& data) {
-    // TODO: implement SHA256 using OpenSSL.
-    (void)data;
-    return "";
+    unsigned char hash[SHA256_DIGEST_LENGTH];
+
+    // Compute SHA256 of the input data
+    SHA256(reinterpret_cast<const unsigned char*>(data.data()),
+           data.size(),
+           hash);
+
+    // Convert to lowercase hex string
+    std::ostringstream oss;
+    oss << std::hex << std::setfill('0');
+    for (unsigned char byte : hash) {
+        oss << std::setw(2) << static_cast<int>(byte);
+    }
+    return oss.str();
 }
 
 std::vector<unsigned char> S3Uploader::hmac_sha256(const std::string& key,
                                                    const std::string& message) {
-    // TODO: implement HMAC-SHA256 using OpenSSL.
-    (void)key;
-    (void)message;
-    return {};
+    unsigned char result[EVP_MAX_MD_SIZE];
+    unsigned int result_len = 0;
+
+    const EVP_MD* md = EVP_sha256();
+
+    HMAC(md,
+         reinterpret_cast<const unsigned char*>(key.data()),
+         static_cast<int>(key.size()),
+         reinterpret_cast<const unsigned char*>(message.data()),
+         message.size(),
+         result,
+         &result_len);
+
+    return std::vector<unsigned char>(result, result + result_len);
 }
 
 std::string S3Uploader::hmac_sha256_hex(const std::string& key,
                                         const std::string& message) {
-    // TODO: implement using hmac_sha256(...)
-    (void)key;
-    (void)message;
-    return "";
+    auto bytes = hmac_sha256(key, message);
+
+    std::ostringstream oss;
+    oss << std::hex << std::setfill('0');
+    for (unsigned char byte : bytes) {
+        oss << std::setw(2) << static_cast<int>(byte);
+    }
+    return oss.str();
 }
 
 std::string S3Uploader::build_canonical_request(const std::string& http_method,
