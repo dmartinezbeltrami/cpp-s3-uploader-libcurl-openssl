@@ -121,7 +121,7 @@ cmake --build .
 
 ---
 
-# Disclaimer
+## Disclaimer
 
 This implementation is intended for educational and lightweight production use.
 It does not implement:
