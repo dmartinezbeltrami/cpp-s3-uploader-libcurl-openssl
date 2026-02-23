@@ -82,14 +82,29 @@ std::string S3Uploader::build_canonical_request(const std::string& http_method,
                                                 const std::string& canonical_headers,
                                                 const std::string& signed_headers,
                                                 const std::string& payload_hash) {
-    // TODO: implement SigV4 canonical request format.
-    (void)http_method;
-    (void)canonical_uri;
-    (void)canonical_query_string;
-    (void)canonical_headers;
-    (void)signed_headers;
-    (void)payload_hash;
-    return "";
+    // Canonical request format (SigV4):
+    //
+    // CanonicalRequest =
+    //   HTTPMethod + '\n' +
+    //   CanonicalURI + '\n' +
+    //   CanonicalQueryString + '\n' +
+    //   CanonicalHeaders + '\n' +
+    //   SignedHeaders + '\n' +
+    //   PayloadHash
+    //
+    // Note: canonical_headers should already include the final '\n'.
+
+    std::string canonical_request;
+    canonical_request.reserve(256); // rough guess to avoid reallocs
+
+    canonical_request.append(http_method).append("\n");
+    canonical_request.append(canonical_uri).append("\n");
+    canonical_request.append(canonical_query_string).append("\n");
+    canonical_request.append(canonical_headers).append("\n");
+    canonical_request.append(signed_headers).append("\n");
+    canonical_request.append(payload_hash);
+
+    return canonical_request;
 }
 
 std::string S3Uploader::build_string_to_sign(const std::string& amz_datetime,
@@ -97,25 +112,71 @@ std::string S3Uploader::build_string_to_sign(const std::string& amz_datetime,
                                              const std::string& region,
                                              const std::string& service,
                                              const std::string& canonical_request_hash) {
-    // TODO: implement SigV4 string-to-sign.
-    (void)amz_datetime;
-    (void)date;
-    (void)region;
-    (void)service;
-    (void)canonical_request_hash;
-    return "";
+    // StringToSign format (SigV4):
+    //
+    // StringToSign =
+    //   Algorithm + '\n' +
+    //   RequestDateTime + '\n' +
+    //   CredentialScope + '\n' +
+    //   HexEncode(Hash(CanonicalRequest))
+    //
+    // Here we assume canonical_request_hash is already HexEncode(Hash(CanonicalRequest)).
+    //
+    // Algorithm is always "AWS4-HMAC-SHA256".
+    //
+    // CredentialScope = date + "/" + region + "/" + service + "/aws4_request"
+
+    const std::string algorithm = "AWS4-HMAC-SHA256";
+    const std::string credential_scope =
+        date + "/" + region + "/" + service + "/aws4_request";
+
+    std::string string_to_sign;
+    string_to_sign.reserve(256);
+
+    string_to_sign.append(algorithm).append("\n");
+    string_to_sign.append(amz_datetime).append("\n");
+    string_to_sign.append(credential_scope).append("\n");
+    string_to_sign.append(canonical_request_hash);
+
+    return string_to_sign;
 }
 
 std::string S3Uploader::derive_signing_key(const std::string& secret_key,
                                            const std::string& date,
                                            const std::string& region,
                                            const std::string& service) {
-    // TODO: implement SigV4 signing key derivation.
-    (void)secret_key;
-    (void)date;
-    (void)region;
-    (void)service;
-    return "";
+    // SigV4 signing key derivation:
+    //
+    // kDate    = HMAC("AWS4" + secret_key, date)
+    // kRegion  = HMAC(kDate, region)
+    // kService = HMAC(kRegion, service)
+    // kSigning = HMAC(kService, "aws4_request")
+    //
+    // We return kSigning as a binary string (not hex).
+
+    const std::string k_secret = "AWS4" + secret_key;
+
+    // kDate
+    auto k_date_bytes = hmac_sha256(k_secret, date);
+    std::string k_date(reinterpret_cast<const char*>(k_date_bytes.data()),
+                       k_date_bytes.size());
+
+    // kRegion
+    auto k_region_bytes = hmac_sha256(k_date, region);
+    std::string k_region(reinterpret_cast<const char*>(k_region_bytes.data()),
+                         k_region_bytes.size());
+
+    // kService
+    auto k_service_bytes = hmac_sha256(k_region, service);
+    std::string k_service(reinterpret_cast<const char*>(k_service_bytes.data()),
+                          k_service_bytes.size());
+
+    // kSigning
+    auto k_signing_bytes = hmac_sha256(k_service, "aws4_request");
+    std::string k_signing(reinterpret_cast<const char*>(k_signing_bytes.data()),
+                          k_signing_bytes.size());
+
+    return k_signing;
 }
 
 std::string S3Uploader::build_authorization_header(const std::string& access_key,
@@ -124,14 +185,25 @@ std::string S3Uploader::build_authorization_header(const std::string& access_key
                                                    const std::string& service,
                                                    const std::string& signed_headers,
                                                    const std::string& signature) {
-    // TODO: implement SigV4 Authorization header.
-    (void)access_key;
-    (void)date;
-    (void)region;
-    (void)service;
-    (void)signed_headers;
-    (void)signature;
-    return "";
+    // Authorization header format:
+    //
+    // Authorization: AWS4-HMAC-SHA256
+    //   Credential=access_key/credential_scope,
+    //   SignedHeaders=signed_headers,
+    //   Signature=signature
+    //
+    // We only return the value part, not the "Authorization:" key.
+
+    const std::string credential_scope =
+        date + "/" + region + "/" + service + "/aws4_request";
+
+    std::ostringstream oss;
+    oss << "AWS4-HMAC-SHA256 "
+        << "Credential=" << access_key << "/" << credential_scope
+        << ", SignedHeaders=" << signed_headers
+        << ", Signature=" << signature;
+
+    return oss.str();
 }
 
 bool S3Uploader::perform_put(const std::string& bucket,
